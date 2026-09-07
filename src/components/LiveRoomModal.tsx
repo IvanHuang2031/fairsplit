@@ -39,14 +39,16 @@ export const LiveRoomModal: React.FC<LiveRoomModalProps> = ({
   };
 
   const handleCreateNewRoom = () => {
-    const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    // Generate a 6-digit pure number (100000 - 999999)
+    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
     onJoinRoom(randomCode, true);
   };
 
   const handleJoinCustomRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    if (customRoomInput.trim()) {
-      onJoinRoom(customRoomInput.trim().toUpperCase(), false);
+    const clean = customRoomInput.trim();
+    if (clean) {
+      onJoinRoom(clean, false);
       setCustomRoomInput('');
     }
   };
@@ -156,14 +158,17 @@ export const LiveRoomModal: React.FC<LiveRoomModalProps> = ({
               <form onSubmit={handleJoinCustomRoom} className="w-full flex gap-2 mt-2">
                 <input
                   type="text"
-                  placeholder="例如：TRIP26"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="輸入 6 位數字代碼"
                   value={customRoomInput}
-                  onChange={e => setCustomRoomInput(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm font-mono uppercase bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
+                  onChange={e => setCustomRoomInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="flex-1 px-3 py-2 text-sm font-mono text-center tracking-widest bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
                 />
                 <button
                   type="submit"
-                  disabled={!customRoomInput.trim()}
+                  disabled={customRoomInput.trim().length !== 6}
                   className="px-3 py-2 rounded-xl text-sm font-semibold bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors"
                 >
                   <ArrowRight size={16} />
@@ -175,7 +180,7 @@ export const LiveRoomModal: React.FC<LiveRoomModalProps> = ({
           {/* Privacy Note */}
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-4">
             <ShieldCheck size={14} />
-            <span>WebRTC 點對點端到端傳輸，資料不經第三方伺服器儲存</span>
+            <span>端到端即時同步，資料直接保存在各成員的手機與瀏覽器中</span>
           </div>
         </div>
       </div>
