@@ -45,7 +45,11 @@ export function generateShareUrl(bill: BillState): string {
  * Generate a live room shareable URL
  */
 export function generateRoomUrl(roomId: string): string {
-  const base = window.location.origin + window.location.pathname;
+  let base = window.location.origin + window.location.pathname;
+  // If running on local dev server, point QR code to the public production URL so phones can open it directly
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    base = 'https://ivanhuang2031.github.io/fairsplit/';
+  }
   return `${base}#room=${encodeURIComponent(roomId)}`;
 }
 

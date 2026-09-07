@@ -1,4 +1,4 @@
-import { joinRoom, Room } from 'trystero/torrent';
+import mqtt, { MqttClient } from 'mqtt';
 import { BillState } from '../types';
 
 export interface SyncEngineCallbacks {
@@ -7,103 +7,270 @@ export interface SyncEngineCallbacks {
   onError?: (err: Error) => void;
 }
 
+const MQTT_BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt',
+];
+
+interface SyncMessage {
+  type: 'join' | 'ping' | 'leave' | 'sync' | 'update';
+  senderId: string;
+  timestamp: number;
+  bill?: BillState;
+}
+
 class SyncEngine {
-  private currentRoom: Room | null = null;
+  private client: MqttClient | null = null;
   private currentRoomId: string | null = null;
-  private connectedPeers: Set<string> = new Set();
-  private sendStateAction: ((data: string, targetPeerId?: string) => void) | null = null;
+  private currentTopic: string | null = null;
+  private selfClientId: string;
+  private peers: Map<string, number> = new Map(); // peerId -> lastSeen
+  private heartbeatTimer: any = null;
+  private peerCheckTimer: any = null;
   private latestLocalState: BillState | null = null;
   private callbacks: SyncEngineCallbacks | null = null;
+  private brokerIndex: number = 0;
+
+  constructor() {
+    this.selfClientId = `fs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  }
 
   public get roomId(): string | null {
     return this.currentRoomId;
   }
 
   public get peerCount(): number {
-    return this.connectedPeers.size;
+    return this.peers.size;
   }
 
   public join(roomId: string, currentState: BillState, callbacks: SyncEngineCallbacks): void {
-    if (this.currentRoomId === roomId && this.currentRoom) {
+    const cleanRoomId = roomId.trim().toUpperCase();
+    if (this.currentRoomId === cleanRoomId && this.client?.connected) {
       this.latestLocalState = currentState;
       return;
     }
 
     this.leave();
 
-    this.currentRoomId = roomId;
+    this.currentRoomId = cleanRoomId;
+    this.currentTopic = `fairsplit/v2/rooms/${cleanRoomId}`;
     this.latestLocalState = currentState;
     this.callbacks = callbacks;
-    this.connectedPeers.clear();
+    this.peers.clear();
 
+    this.connectBroker(this.brokerIndex);
+  }
+
+  private connectBroker(index: number): void {
+    const brokerUrl = MQTT_BROKERS[index % MQTT_BROKERS.length];
+    
     try {
-      const room = joinRoom({ appId: 'fairsplit-v1' }, roomId);
-      this.currentRoom = room;
+      const client = mqtt.connect(brokerUrl, {
+        clientId: this.selfClientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 3000,
+      });
 
-      const [sendState, onGetState] = room.makeAction<string>('billSync');
-      this.sendStateAction = sendState;
+      this.client = client;
 
-      onGetState((rawJson, peerId) => {
-        try {
-          const incomingState = JSON.parse(rawJson) as BillState;
-          if (!incomingState || !incomingState.members || !incomingState.expenses) return;
+      client.on('connect', () => {
+        if (!this.currentTopic) return;
 
-          // Compare timestamps: accept incoming state if it's newer
-          if (!this.latestLocalState || incomingState.lastModified > (this.latestLocalState.lastModified || 0)) {
-            this.latestLocalState = incomingState;
-            this.callbacks?.onStateReceived(incomingState);
-          } else if (this.latestLocalState && this.latestLocalState.lastModified > (incomingState.lastModified || 0)) {
-            // Send our newer state specifically back to the outdated peer
-            sendState(JSON.stringify(this.latestLocalState), peerId);
+        client.subscribe(this.currentTopic, { qos: 1 }, (err) => {
+          if (!err) {
+            // 1. Announce join to the room
+            this.send({
+              type: 'join',
+              senderId: this.selfClientId,
+              timestamp: Date.now(),
+            });
+
+            // 2. Start heartbeat & peer cleanup timers
+            this.startHeartbeat();
           }
-        } catch (e) {
-          console.warn('Failed to parse incoming sync state:', e);
+        });
+      });
+
+      client.on('message', (_topic, messageBuffer) => {
+        try {
+          const raw = messageBuffer.toString();
+          const msg = JSON.parse(raw) as SyncMessage;
+
+          // Ignore self messages
+          if (!msg || msg.senderId === this.selfClientId) return;
+
+          this.handleIncomingMessage(msg);
+        } catch (err) {
+          console.warn('Failed to parse incoming sync message:', err);
         }
       });
 
-      room.onPeerJoin(peerId => {
-        this.connectedPeers.add(peerId);
-        this.callbacks?.onPeersChanged(this.connectedPeers.size);
-
-        // When a new peer arrives, share our current state so they catch up instantly
-        if (this.latestLocalState && this.sendStateAction) {
-          this.sendStateAction(JSON.stringify(this.latestLocalState), peerId);
-        }
+      client.on('error', (err) => {
+        console.warn(`MQTT connection error with broker ${brokerUrl}:`, err);
+        this.callbacks?.onError?.(err);
       });
 
-      room.onPeerLeave(peerId => {
-        this.connectedPeers.delete(peerId);
-        this.callbacks?.onPeersChanged(this.connectedPeers.size);
+      // Handle broker disconnect/failover
+      client.on('close', () => {
+        // Will auto reconnect via reconnectPeriod
       });
+
     } catch (err: any) {
-      console.warn('WebRTC P2P Sync failed to initialize:', err);
+      console.warn('Failed to initialize MQTT sync:', err);
       this.callbacks?.onError?.(err);
+    }
+  }
+
+  private handleIncomingMessage(msg: SyncMessage): void {
+    const sender = msg.senderId;
+    const now = Date.now();
+
+    switch (msg.type) {
+      case 'join': {
+        this.peers.set(sender, now);
+        this.notifyPeers();
+
+        // When someone joins, send our current bill state so they catch up instantly
+        if (this.latestLocalState) {
+          this.send({
+            type: 'sync',
+            senderId: this.selfClientId,
+            timestamp: now,
+            bill: this.latestLocalState,
+          });
+        }
+        break;
+      }
+
+      case 'ping': {
+        this.peers.set(sender, now);
+        this.notifyPeers();
+        break;
+      }
+
+      case 'leave': {
+        this.peers.delete(sender);
+        this.notifyPeers();
+        break;
+      }
+
+      case 'sync':
+      case 'update': {
+        this.peers.set(sender, now);
+        this.notifyPeers();
+
+        if (msg.bill && msg.bill.members && msg.bill.expenses) {
+          const incomingLastModified = msg.bill.lastModified || 0;
+          const localLastModified = this.latestLocalState?.lastModified || 0;
+
+          // Accept incoming state if it's newer or if we just joined with an empty bill
+          if (!this.latestLocalState || incomingLastModified > localLastModified) {
+            this.latestLocalState = msg.bill;
+            this.callbacks?.onStateReceived(msg.bill);
+          } else if (localLastModified > incomingLastModified && msg.type === 'sync') {
+            // Our state is newer, reply with our newer state
+            this.send({
+              type: 'update',
+              senderId: this.selfClientId,
+              timestamp: now,
+              bill: this.latestLocalState,
+            });
+          }
+        }
+        break;
+      }
     }
   }
 
   public broadcast(state: BillState): void {
     this.latestLocalState = state;
-    if (this.sendStateAction && this.connectedPeers.size > 0) {
-      try {
-        this.sendStateAction(JSON.stringify(state));
-      } catch (err) {
-        console.warn('Failed to broadcast state:', err);
-      }
+    if (this.client?.connected && this.currentTopic) {
+      this.send({
+        type: 'update',
+        senderId: this.selfClientId,
+        timestamp: Date.now(),
+        bill: state,
+      });
     }
   }
 
-  public leave(): void {
-    if (this.currentRoom) {
-      try {
-        this.currentRoom.leave();
-      } catch (e) {
-        // Ignore leave errors
-      }
-      this.currentRoom = null;
+  private send(msg: SyncMessage): void {
+    if (!this.client?.connected || !this.currentTopic) return;
+    try {
+      this.client.publish(this.currentTopic, JSON.stringify(msg), { qos: 1 });
+    } catch (e) {
+      console.warn('Failed to publish sync message:', e);
     }
+  }
+
+  private startHeartbeat(): void {
+    this.stopTimers();
+
+    // Send ping every 5 seconds
+    this.heartbeatTimer = setInterval(() => {
+      this.send({
+        type: 'ping',
+        senderId: this.selfClientId,
+        timestamp: Date.now(),
+      });
+    }, 5000);
+
+    // Check for timed out peers every 4 seconds (timeout after 12 seconds of inactivity)
+    this.peerCheckTimer = setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+
+      for (const [peerId, lastSeen] of this.peers.entries()) {
+        if (now - lastSeen > 12000) {
+          this.peers.delete(peerId);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        this.notifyPeers();
+      }
+    }, 4000);
+  }
+
+  private stopTimers(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.peerCheckTimer) {
+      clearInterval(this.peerCheckTimer);
+      this.peerCheckTimer = null;
+    }
+  }
+
+  private notifyPeers(): void {
+    this.callbacks?.onPeersChanged(this.peers.size);
+  }
+
+  public leave(): void {
+    this.stopTimers();
+
+    if (this.client?.connected && this.currentTopic) {
+      this.send({
+        type: 'leave',
+        senderId: this.selfClientId,
+        timestamp: Date.now(),
+      });
+      try {
+        this.client.unsubscribe(this.currentTopic);
+        this.client.end(true);
+      } catch {
+        // Ignore end errors
+      }
+    }
+
+    this.client = null;
     this.currentRoomId = null;
-    this.connectedPeers.clear();
-    this.sendStateAction = null;
+    this.currentTopic = null;
+    this.peers.clear();
     this.callbacks?.onPeersChanged(0);
   }
 }
