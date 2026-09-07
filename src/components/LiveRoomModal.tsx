@@ -8,7 +8,7 @@ interface LiveRoomModalProps {
   onClose: () => void;
   roomId?: string;
   peerCount: number;
-  onJoinRoom: (roomId: string) => void;
+  onJoinRoom: (roomId: string, isNewRoom?: boolean) => void;
   onLeaveRoom: () => void;
 }
 
@@ -40,13 +40,13 @@ export const LiveRoomModal: React.FC<LiveRoomModalProps> = ({
 
   const handleCreateNewRoom = () => {
     const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    onJoinRoom(randomCode);
+    onJoinRoom(randomCode, true);
   };
 
   const handleJoinCustomRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (customRoomInput.trim()) {
-      onJoinRoom(customRoomInput.trim().toUpperCase());
+      onJoinRoom(customRoomInput.trim().toUpperCase(), false);
       setCustomRoomInput('');
     }
   };

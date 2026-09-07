@@ -43,7 +43,7 @@ const DEFAULT_BILL: BillState = {
     currency: 'TWD',
     roundToInteger: true,
   },
-  lastModified: Date.now(),
+  lastModified: 0, // Initial unedited default must be 0 so it never overwrites real bills
 };
 
 export function useBillState() {
@@ -53,6 +53,29 @@ export function useBillState() {
       const parsed = parseHash(window.location.hash);
       if (parsed?.type === 'data') {
         return parsed.bill;
+      }
+      if (parsed?.type === 'room') {
+        const targetRoom = parsed.roomId.trim().toUpperCase();
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const parsedSaved = JSON.parse(saved);
+            if (parsedSaved?.roomId === targetRoom && Array.isArray(parsedSaved.members) && (parsedSaved.lastModified || 0) > 0) {
+              return parsedSaved;
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        return {
+          title: '同步房間中...',
+          members: [],
+          expenses: [],
+          options: { currency: 'TWD', roundToInteger: true },
+          roomId: targetRoom,
+          lastModified: 0,
+        };
       }
       
       // 2. LocalStorage fallback
@@ -113,8 +136,10 @@ export function useBillState() {
       const next = updater(prev);
       const withTimestamp: BillState = {
         ...next,
+        title: next.title === '同步房間中...' ? '新分帳活動' : next.title,
         lastModified: Date.now(),
       };
+      billRef.current = withTimestamp;
       // Broadcast to connected peers
       if (withTimestamp.roomId) {
         syncEngine.broadcast(withTimestamp);
@@ -126,8 +151,12 @@ export function useBillState() {
   // Handle incoming remote state from peers
   const handleRemoteState = useCallback((remoteState: BillState) => {
     setBill(prev => {
-      // Only accept if remote is newer
-      if (!prev.lastModified || remoteState.lastModified > prev.lastModified) {
+      const incomingLastModified = remoteState.lastModified || 0;
+      const localLastModified = prev.lastModified || 0;
+
+      // Accept if incoming is newer or if we have uninitialized state
+      if (localLastModified === 0 || incomingLastModified >= localLastModified) {
+        billRef.current = remoteState;
         return remoteState;
       }
       return prev;
@@ -135,46 +164,94 @@ export function useBillState() {
   }, []);
 
   // Connect or disconnect room
-  const joinRoom = useCallback((roomId: string) => {
-    const cleanRoomId = roomId.trim();
+  const joinRoom = useCallback((roomId: string, isNewRoom: boolean = false) => {
+    const cleanRoomId = roomId.trim().toUpperCase();
     if (!cleanRoomId) return;
 
-    updateBill(prev => ({ ...prev, roomId: cleanRoomId }));
+    let targetBill: BillState;
+    const current = billRef.current;
 
-    syncEngine.join(cleanRoomId, billRef.current, {
+    if (isNewRoom) {
+      // Creating a new room: retain current bill and ensure lastModified > 0
+      targetBill = {
+        ...current,
+        roomId: cleanRoomId,
+        lastModified: current.lastModified || Date.now(),
+      };
+    } else {
+      // Joining an existing room:
+      // If we already have this room loaded with valid edits:
+      if (current.roomId === cleanRoomId && (current.lastModified || 0) > 0) {
+        targetBill = current;
+      } else {
+        let existingRoomBill: BillState | null = null;
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed?.roomId === cleanRoomId && Array.isArray(parsed.members) && (parsed.lastModified || 0) > 0) {
+              existingRoomBill = parsed;
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        if (existingRoomBill) {
+          targetBill = existingRoomBill;
+        } else {
+          targetBill = {
+            title: '同步房間中...',
+            members: [],
+            expenses: [],
+            options: current.options || { currency: 'TWD', roundToInteger: true },
+            roomId: cleanRoomId,
+            lastModified: 0,
+          };
+        }
+      }
+    }
+
+    billRef.current = targetBill;
+    setBill(targetBill);
+
+    syncEngine.join(cleanRoomId, targetBill, {
       onStateReceived: handleRemoteState,
       onPeersChanged: setPeerCount,
     });
 
     // Update URL hash without reload
     window.history.replaceState(null, '', `#room=${encodeURIComponent(cleanRoomId)}`);
-  }, [updateBill, handleRemoteState]);
+  }, [handleRemoteState]);
 
   const leaveRoom = useCallback(() => {
     syncEngine.leave();
     setPeerCount(0);
-    updateBill(prev => {
+    setBill(prev => {
       const { roomId: _discard, ...rest } = prev;
-      return rest as BillState;
+      const updated = rest as BillState;
+      billRef.current = updated;
+      return updated;
     });
     window.history.replaceState(null, '', window.location.pathname);
-  }, [updateBill]);
+  }, []);
 
   // Listen to initial URL room hash
   useEffect(() => {
     const parsed = parseHash(window.location.hash);
     if (parsed?.type === 'room') {
-      joinRoom(parsed.roomId);
-    } else if (bill.roomId) {
+      joinRoom(parsed.roomId, false);
+    } else if (billRef.current.roomId) {
       // Reconnect room if saved in state
-      joinRoom(bill.roomId);
+      joinRoom(billRef.current.roomId, false);
     }
 
     const handleHashChange = () => {
       const p = parseHash(window.location.hash);
       if (p?.type === 'room' && p.roomId !== billRef.current.roomId) {
-        joinRoom(p.roomId);
+        joinRoom(p.roomId, false);
       } else if (p?.type === 'data') {
+        billRef.current = p.bill;
         setBill(p.bill);
       }
     };
@@ -183,7 +260,7 @@ export function useBillState() {
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
     };
-  }, []); // Run on mount
+  }, [joinRoom]);
 
   // Mutations
   const setTitle = useCallback((title: string) => {

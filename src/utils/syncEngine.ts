@@ -16,6 +16,7 @@ const MQTT_BROKERS = [
 interface SyncMessage {
   type: 'join' | 'ping' | 'leave' | 'sync' | 'update';
   senderId: string;
+  targetId?: string; // If set, only the targeted recipient processes it
   timestamp: number;
   bill?: BillState;
 }
@@ -31,6 +32,7 @@ class SyncEngine {
   private latestLocalState: BillState | null = null;
   private callbacks: SyncEngineCallbacks | null = null;
   private brokerIndex: number = 0;
+  private isWaitingInitialSync: boolean = false;
 
   constructor() {
     this.selfClientId = `fs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -58,6 +60,8 @@ class SyncEngine {
     this.latestLocalState = currentState;
     this.callbacks = callbacks;
     this.peers.clear();
+    // If local state has no modification timestamp or is 0, wait for room peers to sync to us
+    this.isWaitingInitialSync = (currentState.lastModified || 0) === 0;
 
     this.connectBroker(this.brokerIndex);
   }
@@ -132,11 +136,13 @@ class SyncEngine {
         this.peers.set(sender, now);
         this.notifyPeers();
 
-        // When someone joins, send our current bill state so they catch up instantly
-        if (this.latestLocalState) {
+        // When someone joins, if we have an active valid state (lastModified > 0),
+        // send our current state targeted specifically to the newcomer so they sync up immediately
+        if (this.latestLocalState && (this.latestLocalState.lastModified || 0) > 0) {
           this.send({
             type: 'sync',
             senderId: this.selfClientId,
+            targetId: sender,
             timestamp: now,
             bill: this.latestLocalState,
           });
@@ -156,27 +162,43 @@ class SyncEngine {
         break;
       }
 
-      case 'sync':
+      case 'sync': {
+        this.peers.set(sender, now);
+        this.notifyPeers();
+
+        // If message is targeted to someone else, ignore it completely
+        if (msg.targetId && msg.targetId !== this.selfClientId) {
+          break;
+        }
+
+        if (msg.bill && Array.isArray(msg.bill.members) && Array.isArray(msg.bill.expenses)) {
+          const incomingLastModified = msg.bill.lastModified || 0;
+          const localLastModified = this.latestLocalState?.lastModified || 0;
+
+          // Accept incoming state if we are waiting for initial sync or if incoming is newer
+          if (this.isWaitingInitialSync || incomingLastModified > localLastModified) {
+            this.isWaitingInitialSync = false;
+            this.latestLocalState = msg.bill;
+            this.callbacks?.onStateReceived(msg.bill);
+          }
+          // Note: We NEVER broadcast a reverse update on receiving sync!
+        }
+        break;
+      }
+
       case 'update': {
         this.peers.set(sender, now);
         this.notifyPeers();
 
-        if (msg.bill && msg.bill.members && msg.bill.expenses) {
+        if (msg.bill && Array.isArray(msg.bill.members) && Array.isArray(msg.bill.expenses)) {
           const incomingLastModified = msg.bill.lastModified || 0;
           const localLastModified = this.latestLocalState?.lastModified || 0;
 
-          // Accept incoming state if it's newer or if we just joined with an empty bill
-          if (!this.latestLocalState || incomingLastModified > localLastModified) {
+          // Accept incoming update if we are waiting for initial sync or if incoming is newer
+          if (this.isWaitingInitialSync || incomingLastModified > localLastModified) {
+            this.isWaitingInitialSync = false;
             this.latestLocalState = msg.bill;
             this.callbacks?.onStateReceived(msg.bill);
-          } else if (localLastModified > incomingLastModified && msg.type === 'sync') {
-            // Our state is newer, reply with our newer state
-            this.send({
-              type: 'update',
-              senderId: this.selfClientId,
-              timestamp: now,
-              bill: this.latestLocalState,
-            });
           }
         }
         break;
@@ -186,6 +208,7 @@ class SyncEngine {
 
   public broadcast(state: BillState): void {
     this.latestLocalState = state;
+    this.isWaitingInitialSync = false;
     if (this.client?.connected && this.currentTopic) {
       this.send({
         type: 'update',
@@ -208,13 +231,22 @@ class SyncEngine {
   private startHeartbeat(): void {
     this.stopTimers();
 
-    // Send ping every 5 seconds
+    // Heartbeat every 5 seconds
     this.heartbeatTimer = setInterval(() => {
-      this.send({
-        type: 'ping',
-        senderId: this.selfClientId,
-        timestamp: Date.now(),
-      });
+      // If we are still waiting for initial sync, re-announce join so peers can reply
+      if (this.isWaitingInitialSync) {
+        this.send({
+          type: 'join',
+          senderId: this.selfClientId,
+          timestamp: Date.now(),
+        });
+      } else {
+        this.send({
+          type: 'ping',
+          senderId: this.selfClientId,
+          timestamp: Date.now(),
+        });
+      }
     }, 5000);
 
     // Check for timed out peers every 4 seconds (timeout after 12 seconds of inactivity)
@@ -271,6 +303,7 @@ class SyncEngine {
     this.currentRoomId = null;
     this.currentTopic = null;
     this.peers.clear();
+    this.isWaitingInitialSync = false;
     this.callbacks?.onPeersChanged(0);
   }
 }
