@@ -1,0 +1,1 @@
+{"name":"分帳小幫手 FairSplit","short_name":"FairSplit","description":"極簡、高對比、即時多人連線協同分帳工具","start_url":"/fairsplit/","display":"standalone","background_color":"#09090b","theme_color":"#09090b","lang":"en","scope":"/fairsplit/","icons":[{"src":"pwa-192x192.png","sizes":"192x192","type":"image/png"},{"src":"pwa-512x512.png","sizes":"512x512","type":"image/png"}]}
