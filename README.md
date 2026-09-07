@@ -2,6 +2,9 @@
 
 > 隨時可用・極簡黑白高對比・免註冊・支援多人手機掃碼即時協同・PWA 離線支援
 
+🔗 **線上正式網址**：[https://ivanhuang2031.github.io/fairsplit/](https://ivanhuang2031.github.io/fairsplit/)  
+📦 **GitHub 倉庫**：[https://github.com/IvanHuang2031/fairsplit](https://github.com/IvanHuang2031/fairsplit)
+
 「分帳小幫手」專為朋友聚會、情侶出遊、團體旅行設計，提供最極簡順暢的分帳體驗。
 
 ---
