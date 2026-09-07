@@ -19,12 +19,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   settlement,
 }) => {
   const [activeTab, setActiveTab] = useState<'line' | 'link'>('line');
+  const [isDetailed, setIsDetailed] = useState(true);
   const [copiedLine, setCopiedLine] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
 
-  const lineReport = formatLineReport(bill, settlement);
+  const lineReport = formatLineReport(bill, settlement, isDetailed);
   const shareUrl = generateShareUrl(bill);
 
   const handleCopyLine = async () => {
@@ -49,7 +50,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center gap-2">
@@ -94,14 +95,42 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         <div className="p-4">
           {activeTab === 'line' ? (
             <div className="space-y-3">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                點擊按鈕複製以下文字，直接貼到 LINE、Messenger 或群組聊天室：
-              </p>
+              {/* Detail format switcher */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  複製內容格式：
+                </span>
+                <div className="inline-flex p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailed(true)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      isDetailed
+                        ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    📝 完整含逐筆計算過程
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailed(false)}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      !isDetailed
+                        ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    精簡版
+                  </button>
+                </div>
+              </div>
+
               <textarea
                 readOnly
-                rows={10}
+                rows={12}
                 value={lineReport}
-                className="w-full p-3 text-xs font-mono bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none resize-none text-zinc-800 dark:text-zinc-200"
+                className="w-full p-3 text-xs font-mono bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none resize-none text-zinc-800 dark:text-zinc-200 leading-relaxed"
               />
               <button
                 onClick={handleCopyLine}

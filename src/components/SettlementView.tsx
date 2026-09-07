@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   ArrowRight, 
@@ -9,13 +9,16 @@ import {
   TrendingUp, 
   TrendingDown, 
   Scale, 
-  MessageSquareShare 
+  MessageSquareShare,
+  Calculator
 } from 'lucide-react';
-import { SettlementResult } from '../types';
-import { formatCurrency } from '../utils/settlement';
+import { SettlementResult, Member, Expense } from '../types';
+import { formatCurrency, getAllExpenseBreakdowns } from '../utils/settlement';
 
 interface SettlementViewProps {
   settlement: SettlementResult;
+  members: Member[];
+  expenses: Expense[];
   currency: string;
   roundToInteger: boolean;
   onOpenShareModal: () => void;
@@ -23,14 +26,20 @@ interface SettlementViewProps {
 
 export const SettlementView: React.FC<SettlementViewProps> = ({
   settlement,
+  members,
+  expenses,
   currency,
   roundToInteger,
   onOpenShareModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'transfers' | 'balances'>('transfers');
+  const [activeTab, setActiveTab] = useState<'transfers' | 'balances' | 'breakdowns'>('transfers');
   const [copiedTransferIdx, setCopiedTransferIdx] = useState<number | null>(null);
 
   const { totalSpent, balances, transfers, perMemberAvg } = settlement;
+
+  const breakdowns = useMemo(() => {
+    return getAllExpenseBreakdowns(members, expenses, { currency, roundToInteger });
+  }, [members, expenses, currency, roundToInteger]);
 
   const handleFireConfetti = () => {
     confetti({
@@ -63,31 +72,42 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
             </h2>
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            人均消費約 {formatCurrency(perMemberAvg, currency, roundToInteger)}，系統已自動簡化為最少轉帳次數
+            人均約 {formatCurrency(perMemberAvg, currency, roundToInteger)} · 支援查看每筆花費的詳細出資與計算公式
           </p>
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="inline-flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-xs font-medium self-start sm:self-auto">
+        <div className="inline-flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-xs font-medium self-start sm:self-auto overflow-x-auto max-w-full">
           <button
             onClick={() => setActiveTab('transfers')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
+            className={`px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
               activeTab === 'transfers'
                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-bold'
                 : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
             }`}
           >
-            最佳還款路線 ({transfers.length})
+            最佳還款 ({transfers.length})
           </button>
           <button
             onClick={() => setActiveTab('balances')}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
+            className={`px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
               activeTab === 'balances'
                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-bold'
                 : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
             }`}
           >
             個人收支淨額
+          </button>
+          <button
+            onClick={() => setActiveTab('breakdowns')}
+            className={`px-3 py-1.5 rounded-lg transition-all flex-shrink-0 flex items-center gap-1 ${
+              activeTab === 'breakdowns'
+                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-bold'
+                : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+            }`}
+          >
+            <Calculator size={13} />
+            <span>逐筆計算明細 ({expenses.length})</span>
           </button>
         </div>
       </div>
@@ -170,7 +190,7 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'balances' ? (
         /* Member Balances List */
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {balances.map(b => {
@@ -210,6 +230,92 @@ export const SettlementView: React.FC<SettlementViewProps> = ({
               </div>
             );
           })}
+        </div>
+      ) : (
+        /* Detailed Breakdown of each Expense */
+        <div className="space-y-3">
+          {breakdowns.length === 0 ? (
+            <div className="py-6 text-center text-xs text-zinc-400">
+              目前尚無支出紀錄
+            </div>
+          ) : (
+            breakdowns.map((b, idx) => (
+              <div
+                key={b.expenseId}
+                className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-700/80 space-y-2.5"
+              >
+                {/* Title & Amount */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-[11px] font-bold flex items-center justify-center text-zinc-700 dark:text-zinc-300">
+                      {idx + 1}
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                      {b.title}
+                    </h3>
+                  </div>
+                  <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">
+                    {formatCurrency(b.totalAmount, currency, roundToInteger)}
+                  </span>
+                </div>
+
+                {/* Meta details */}
+                <div className="text-xs space-y-1 text-zinc-600 dark:text-zinc-400 pl-7">
+                  <div>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">💳 代墊人：</span>
+                    <span>{b.payersSummary}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">🤝 分攤方式：</span>
+                    <span>{b.splitSummary}</span>
+                  </div>
+                  {b.calculationFormula && (
+                    <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 p-2 rounded-lg mt-1 border border-zinc-200/50 dark:border-zinc-700/50">
+                      🧮 計算公式：{b.calculationFormula}
+                    </div>
+                  )}
+                </div>
+
+                {/* Member shares table/grid */}
+                <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60 pl-7">
+                  <span className="text-[11px] font-bold text-zinc-500 block mb-1.5">
+                    每位成員此筆分攤與出資差額：
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                    {b.memberShares.map(s => {
+                      const net = s.paidAmount - s.owedAmount;
+                      return (
+                        <div
+                          key={s.memberId}
+                          className="flex items-center justify-between p-1.5 rounded-lg bg-white/60 dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-700/50"
+                        >
+                          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                            {s.memberName}
+                          </span>
+                          <div className="flex items-center gap-2 font-mono text-[11px]">
+                            <span className="text-zinc-400">
+                              出 {formatCurrency(s.paidAmount, currency, roundToInteger)} / 攤 {formatCurrency(s.owedAmount, currency, roundToInteger)}
+                            </span>
+                            {net > 0 ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                +{formatCurrency(net, currency, roundToInteger)}
+                              </span>
+                            ) : net < 0 ? (
+                              <span className="text-red-500 font-bold">
+                                -{formatCurrency(Math.abs(net), currency, roundToInteger)}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400">$0</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 

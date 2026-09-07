@@ -51,6 +51,22 @@ export interface DebtTransfer {
   amount: number;
 }
 
+export interface ExpenseBreakdown {
+  expenseId: string;
+  title: string;
+  date: string;
+  totalAmount: number;
+  payersSummary: string;
+  splitSummary: string;
+  calculationFormula: string;
+  memberShares: {
+    memberId: string;
+    memberName: string;
+    paidAmount: number;
+    owedAmount: number;
+  }[];
+}
+
 export interface SettlementResult {
   totalSpent: number;
   balances: MemberBalance[];

@@ -154,6 +154,8 @@ export const App: React.FC = () => {
         {/* Section 3: Settlement View */}
         <SettlementView
           settlement={settlement}
+          members={bill.members}
+          expenses={bill.expenses}
           currency={bill.options.currency}
           roundToInteger={bill.options.roundToInteger}
           onOpenShareModal={() => setIsShareModalOpen(true)}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSettlement, formatCurrency } from './settlement';
+import { calculateSettlement, formatCurrency, getExpenseBreakdown } from './settlement';
 import { Member, Expense, SettlementOptions } from '../types';
 
 describe('Settlement Engine', () => {
@@ -227,6 +227,34 @@ describe('Settlement Engine', () => {
     expect(result.totalSpent).toBe(10);
     const totalNet = result.balances.reduce((acc, b) => acc + b.netBalance, 0);
     expect(Math.abs(totalNet)).toBeLessThan(0.01);
+  });
+
+  it('generates clear expense breakdown with payers and formula', () => {
+    const members: Member[] = [
+      { id: '1', name: '小明' },
+      { id: '2', name: '小華' },
+      { id: '3', name: '阿美' },
+    ];
+
+    const expense: Expense = {
+      id: 'e1',
+      title: '火鍋',
+      date: '2026-09-07',
+      totalAmount: 1800,
+      payers: [{ memberId: '1', amount: 1800 }],
+      splitType: 'equal_all',
+      shares: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const breakdown = getExpenseBreakdown(expense, members, optionsTWD);
+    expect(breakdown.payersSummary).toContain('小明 代墊 NT$ 1,800');
+    expect(breakdown.calculationFormula).toContain('1,800 ÷ 3人 = 每人 NT$ 600');
+    expect(breakdown.memberShares).toHaveLength(3);
+    const ming = breakdown.memberShares.find(s => s.memberId === '1')!;
+    expect(ming.paidAmount).toBe(1800);
+    expect(ming.owedAmount).toBe(600);
   });
 
   it('formats currency strings correctly', () => {
