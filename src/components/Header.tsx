@@ -8,7 +8,8 @@ import {
   RotateCcw, 
   Share2, 
   Check, 
-  Edit3 
+  Edit3,
+  HelpCircle 
 } from 'lucide-react';
 import { BillState } from '../types';
 
@@ -22,6 +23,7 @@ interface HeaderProps {
   onOpenLiveModal: () => void;
   onOpenSettingsModal: () => void;
   onOpenShareModal: () => void;
+  onOpenHelpModal: () => void;
   onResetBill: () => void;
 }
 
@@ -35,6 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLiveModal,
   onOpenSettingsModal,
   onOpenShareModal,
+  onOpenHelpModal,
   onResetBill,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -138,6 +141,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Share2 size={13} />
             <span className="hidden sm:inline">分享</span>
+          </button>
+
+          {/* Help Button */}
+          <button
+            onClick={onOpenHelpModal}
+            className="p-1.5 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            title="新手使用指南"
+            aria-label="新手使用指南"
+          >
+            <HelpCircle size={18} />
           </button>
 
           {/* Settings Button */}

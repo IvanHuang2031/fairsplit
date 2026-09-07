@@ -11,6 +11,7 @@ import { SettlementView } from './components/SettlementView';
 import { LiveRoomModal } from './components/LiveRoomModal';
 import { ShareModal } from './components/ShareModal';
 import { SettingsModal } from './components/SettingsModal';
+import { HelpModal } from './components/HelpModal';
 
 export const App: React.FC = () => {
   const {
@@ -37,6 +38,7 @@ export const App: React.FC = () => {
   const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   // Settlement calculation
   const settlement = useMemo(() => {
@@ -76,6 +78,7 @@ export const App: React.FC = () => {
         onOpenLiveModal={() => setIsLiveModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
+        onOpenHelpModal={() => setIsHelpModalOpen(true)}
         onResetBill={resetBill}
       />
 
@@ -229,6 +232,11 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsModalOpen(false)}
         options={bill.options}
         onChangeOptions={setOptions}
+      />
+
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
       />
     </div>
   );
