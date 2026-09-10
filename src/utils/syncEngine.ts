@@ -84,14 +84,24 @@ class SyncEngine {
 
         client.subscribe(this.currentTopic, { qos: 1 }, (err) => {
           if (!err) {
-            // 1. Announce join to the room
+            // 1. If we already have valid active state, publish with retain so offline/future visitors get it immediately
+            if (this.latestLocalState && (this.latestLocalState.lastModified || 0) > 0) {
+              this.send({
+                type: 'update',
+                senderId: this.selfClientId,
+                timestamp: this.latestLocalState.lastModified || Date.now(),
+                bill: this.latestLocalState,
+              }, true);
+            }
+
+            // 2. Announce join to the room
             this.send({
               type: 'join',
               senderId: this.selfClientId,
               timestamp: Date.now(),
             });
 
-            // 2. Start heartbeat & peer cleanup timers
+            // 3. Start heartbeat & peer cleanup timers
             this.startHeartbeat();
           }
         });
@@ -215,14 +225,14 @@ class SyncEngine {
         senderId: this.selfClientId,
         timestamp: Date.now(),
         bill: state,
-      });
+      }, true); // Retain latest bill on broker
     }
   }
 
-  private send(msg: SyncMessage): void {
+  private send(msg: SyncMessage, retain: boolean = false): void {
     if (!this.client?.connected || !this.currentTopic) return;
     try {
-      this.client.publish(this.currentTopic, JSON.stringify(msg), { qos: 1 });
+      this.client.publish(this.currentTopic, JSON.stringify(msg), { qos: 1, retain });
     } catch (e) {
       console.warn('Failed to publish sync message:', e);
     }

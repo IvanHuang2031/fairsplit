@@ -33,24 +33,37 @@ export function decodeBillState(encoded: string): BillState | null {
 }
 
 /**
- * Generate a full shareable URL containing the current bill data
+ * Generate a shareable URL containing the current bill data
+ * If the bill is in an active room, returns the clean, short room URL (e.g. #room=666666)
+ * Otherwise falls back to data compression.
  */
 export function generateShareUrl(bill: BillState): string {
-  const base = window.location.origin + window.location.pathname;
+  if (bill.roomId) {
+    return generateRoomUrl(bill.roomId);
+  }
+  const base = typeof window !== 'undefined'
+    ? window.location.origin + window.location.pathname
+    : 'https://ivanhuang2031.github.io/fairsplit/';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
   const encoded = encodeBillState(bill);
-  return `${base}#data=${encoded}`;
+  return `${cleanBase}#data=${encoded}`;
 }
 
 /**
  * Generate a live room shareable URL
  */
 export function generateRoomUrl(roomId: string): string {
-  let base = window.location.origin + window.location.pathname;
+  let base = typeof window !== 'undefined'
+    ? window.location.origin + window.location.pathname
+    : 'https://ivanhuang2031.github.io/fairsplit/';
+
   // If running on local dev server, point QR code to the public production URL so phones can open it directly
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     base = 'https://ivanhuang2031.github.io/fairsplit/';
   }
-  return `${base}#room=${encodeURIComponent(roomId)}`;
+
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+  return `${cleanBase}#room=${encodeURIComponent(roomId)}`;
 }
 
 /**

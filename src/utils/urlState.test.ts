@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { encodeBillState, decodeBillState } from './urlState';
+import { encodeBillState, decodeBillState, generateShareUrl } from './urlState';
 import { formatLineReport } from './lineFormatter';
 import { calculateSettlement } from './settlement';
 import { BillState } from '../types';
@@ -52,5 +52,15 @@ describe('URL State & Line Formatter', () => {
     expect(report).toContain('小華');
     expect(report).toContain('阿美');
     expect(report).toContain('最佳還款路線');
+  });
+
+  it('generates short room URL when bill is associated with a room', () => {
+    const roomBill: BillState = {
+      ...dummyBill,
+      roomId: '666666',
+    };
+    const shareUrl = generateShareUrl(roomBill);
+    expect(shareUrl).toContain('#room=666666');
+    expect(shareUrl).not.toContain('#data=');
   });
 });

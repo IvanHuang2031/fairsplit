@@ -60,8 +60,14 @@ export function useBillState() {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
             const parsedSaved = JSON.parse(saved);
-            if (parsedSaved?.roomId === targetRoom && Array.isArray(parsedSaved.members) && (parsedSaved.lastModified || 0) > 0) {
-              return parsedSaved;
+            if (
+              (parsedSaved?.roomId === targetRoom || (parsedSaved?.expenses?.length > 0 && (parsedSaved?.lastModified || 0) > 0)) &&
+              Array.isArray(parsedSaved.members)
+            ) {
+              return {
+                ...parsedSaved,
+                roomId: targetRoom,
+              };
             }
           }
         } catch {
@@ -189,8 +195,11 @@ export function useBillState() {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed?.roomId === cleanRoomId && Array.isArray(parsed.members) && (parsed.lastModified || 0) > 0) {
-              existingRoomBill = parsed;
+            if (
+              (parsed?.roomId === cleanRoomId || (parsed?.expenses?.length > 0 && (parsed?.lastModified || 0) > 0)) &&
+              Array.isArray(parsed.members)
+            ) {
+              existingRoomBill = { ...parsed, roomId: cleanRoomId };
             }
           }
         } catch {

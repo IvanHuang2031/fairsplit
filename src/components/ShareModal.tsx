@@ -152,7 +152,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           ) : (
             <div className="space-y-3 flex flex-col items-center text-center">
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                此網址已完整壓縮此份帳單，朋友點開即可查看或接力補充：
+                {bill.roomId ? (
+                  <>
+                    已綁定同步房間 <span className="font-mono font-bold text-zinc-900 dark:text-white">【{bill.roomId}】</span>，短網址方便發送至 IG、LINE 或群組：
+                  </>
+                ) : (
+                  '此網址已完整壓縮此份帳單，朋友點開即可查看或接力補充：'
+                )}
               </p>
 
               <div className="p-3 bg-white rounded-xl shadow-md border border-zinc-200 dark:border-zinc-700 my-1">
@@ -169,7 +175,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   type="text"
                   readOnly
                   value={shareUrl}
-                  className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 font-mono truncate"
+                  className="flex-1 px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-800 dark:text-zinc-200 font-mono truncate"
                 />
                 <button
                   onClick={handleCopyLink}
