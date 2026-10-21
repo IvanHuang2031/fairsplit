@@ -135,7 +135,7 @@ export function calculateSettlement(
       case 'by_shares': {
         const participants = expense.shares
           .filter(s => memberMap.has(s.memberId))
-          .map(s => ({ memberId: s.memberId, weight: Math.max(0.1, s.shares || 1) }));
+          .map(s => ({ memberId: s.memberId, weight: s.shares && s.shares > 0 ? s.shares : 1 }));
         splits = distributeAmount(expense.totalAmount, participants, options.roundToInteger);
         break;
       }
@@ -296,11 +296,11 @@ export function getExpenseBreakdown(
       splitSummary = `依份數比例分攤`;
       const participants = expense.shares
         .filter(s => memberMap.has(s.memberId))
-        .map(s => ({ memberId: s.memberId, weight: Math.max(0.1, s.shares || 1) }));
+        .map(s => ({ memberId: s.memberId, weight: s.shares && s.shares > 0 ? s.shares : 1 }));
       splits = distributeAmount(expense.totalAmount, participants, roundToInteger);
       const totalShares = participants.reduce((acc, p) => acc + p.weight, 0);
       const perShare = totalShares > 0 ? expense.totalAmount / totalShares : 0;
-      calculationFormula = `總計 ${totalShares} 份，每份約 ${formatCurrency(perShare, currency, roundToInteger)}`;
+      calculationFormula = `總計 ${Number(totalShares.toFixed(2))} 份，每份約 ${formatCurrency(perShare, currency, roundToInteger)}`;
       break;
     }
     case 'exact_amount': {

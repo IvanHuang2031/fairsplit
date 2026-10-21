@@ -532,7 +532,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       <input
                         type="number"
                         min="0"
-                        step="0.5"
+                        step="any"
                         inputMode="decimal"
                         placeholder="0"
                         value={memberShares[m.id] ?? '1'}

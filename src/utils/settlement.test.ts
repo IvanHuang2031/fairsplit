@@ -263,3 +263,31 @@ describe('Settlement Engine', () => {
     expect(formatCurrency(5000, 'JPY', true)).toBe('¥5,000');
   });
 });
+
+describe('Decimal shares', () => {
+  it('splits by decimal shares and shows a clean share total', () => {
+    const members: Member[] = [
+      { id: '1', name: '黃' },
+      { id: '2', name: '傅' },
+    ];
+    const expense: Expense = {
+      id: 'e1',
+      title: '計程車',
+      date: '2026-10-22',
+      totalAmount: 300,
+      payers: [{ memberId: '1', amount: 300 }],
+      splitType: 'by_shares',
+      shares: [{ memberId: '1', shares: 0.1 }, { memberId: '2', shares: 0.2 }],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const options: SettlementOptions = { currency: 'TWD', roundToInteger: true };
+
+    const result = calculateSettlement(members, [expense], options);
+    expect(result.balances.find(b => b.memberId === '1')!.totalOwed).toBe(100);
+    expect(result.balances.find(b => b.memberId === '2')!.totalOwed).toBe(200);
+
+    const breakdown = getExpenseBreakdown(expense, members, options);
+    expect(breakdown.calculationFormula).toContain('總計 0.3 份');
+  });
+});
