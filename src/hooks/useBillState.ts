@@ -3,6 +3,7 @@ import { BillState, Member, Expense, SettlementOptions } from '../types';
 import { parseHash } from '../utils/urlState';
 import { syncEngine } from '../utils/syncEngine';
 import { removeMemberFromExpenses } from '../utils/settlement';
+import { PRESET_MEMBERS } from '../constants';
 
 const STORAGE_KEY = 'fairsplit_active_bill_v1';
 const THEME_KEY = 'fairsplit_theme';
@@ -346,12 +347,13 @@ export function useBillState() {
   }, [updateBill]);
 
   const resetBill = useCallback(() => {
+    const now = Date.now();
     const fresh: BillState = {
       title: '新分帳活動',
-      members: [],
+      members: PRESET_MEMBERS.map((name, i) => ({ id: `m_${now}_${i}`, name })),
       expenses: [],
       options: billRef.current.options,
-      lastModified: Date.now(),
+      lastModified: now,
     };
     updateBill(() => fresh);
     window.history.replaceState(null, '', window.location.pathname);

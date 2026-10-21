@@ -12,6 +12,7 @@ import {
   HelpCircle 
 } from 'lucide-react';
 import { BillState } from '../types';
+import { PRESET_MEMBERS } from '../constants';
 
 interface HeaderProps {
   bill: BillState;
@@ -53,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleResetConfirm = () => {
-    if (window.confirm('確定要清空目前這張帳單的所有成員與支出嗎？此操作無法復原。')) {
+    if (window.confirm(`確定要清空目前這張帳單的所有支出，並將成員重設為${PRESET_MEMBERS.join('、')}嗎？此操作無法復原。`)) {
       onResetBill();
     }
   };

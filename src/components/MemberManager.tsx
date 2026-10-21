@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { UserPlus, X, User, Users } from 'lucide-react';
 import { Member } from '../types';
-
-// Most frequent group, offered as a one-click fill on an empty bill
-const PRESET_MEMBERS = ['黃', '傅', '吳', '卓'];
+import { PRESET_MEMBERS } from '../constants';
 
 interface MemberManagerProps {
   members: Member[];
