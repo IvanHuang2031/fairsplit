@@ -37,7 +37,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <span>步驟 1：建立分帳名單</span>
             </div>
             <p>
-              在「分帳成員名單」輸入朋友姓名並點擊「加入」。出遊人數無上限，也可以直接點「+ 快速填入範例成員」體驗。
+              在「分帳成員名單」輸入朋友姓名並點擊「加入」。出遊人數無上限，也可以直接點「+ 快速填入」一鍵加入常用成員。
             </p>
           </div>
 

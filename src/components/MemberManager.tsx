@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { UserPlus, X, User, Users } from 'lucide-react';
 import { Member } from '../types';
 
+// Most frequent group, offered as a one-click fill on an empty bill
+const PRESET_MEMBERS = ['黃', '傅', '吳', '卓'];
+
 interface MemberManagerProps {
   members: Member[];
   onAddMember: (name: string) => void;
@@ -24,8 +27,7 @@ export const MemberManager: React.FC<MemberManagerProps> = ({
   };
 
   const handleQuickAddPresets = () => {
-    const presets = ['小明', '小華', '阿美'];
-    presets.forEach(p => {
+    PRESET_MEMBERS.forEach(p => {
       if (!members.some(m => m.name === p)) {
         onAddMember(p);
       }
@@ -50,7 +52,7 @@ export const MemberManager: React.FC<MemberManagerProps> = ({
             onClick={handleQuickAddPresets}
             className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white underline underline-offset-2"
           >
-            + 快速填入範例成員
+            + 快速填入：{PRESET_MEMBERS.join('、')}
           </button>
         )}
       </div>
