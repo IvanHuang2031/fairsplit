@@ -355,3 +355,58 @@ export function getAllExpenseBreakdowns(
   return expenses.map(e => getExpenseBreakdown(e, members, options));
 }
 
+
+/**
+ * Remove a member from every expense while keeping each expense balanced
+ * (payers sum === totalAmount === owed sum), as if the member never took part:
+ * - their payment is deducted from the expense total
+ * - their share is absorbed by the remaining participants of that expense
+ * - an expense left with no payer, no amount, or nobody to split it is dropped
+ */
+export function removeMemberFromExpenses(
+  expenses: Expense[],
+  memberId: string,
+  roundToInteger: boolean
+): Expense[] {
+  const result: Expense[] = [];
+
+  for (const expense of expenses) {
+    const removedPaid = expense.payers
+      .filter(p => p.memberId === memberId)
+      .reduce((sum, p) => sum + p.amount, 0);
+    const payers = expense.payers.filter(p => p.memberId !== memberId);
+    const shares = expense.shares.filter(s => s.memberId !== memberId);
+    const touched = removedPaid > 0 || shares.length !== expense.shares.length;
+
+    if (!touched) {
+      result.push(expense);
+      continue;
+    }
+
+    const totalAmount = Number((expense.totalAmount - removedPaid).toFixed(2));
+    if (payers.length === 0 || totalAmount <= 0) continue;
+
+    if (expense.splitType === 'equal_all') {
+      result.push({ ...expense, totalAmount, payers });
+      continue;
+    }
+
+    if (shares.length === 0) continue;
+
+    if (expense.splitType === 'exact_amount') {
+      // Rescale remaining exact amounts so they add up to the new total again
+      const weights = shares.map(s => ({ memberId: s.memberId, weight: s.exactAmount || 0 }));
+      const scaled = distributeAmount(totalAmount, weights, roundToInteger);
+      const rescaled = shares
+        .map(s => ({ memberId: s.memberId, exactAmount: scaled[s.memberId] || 0 }))
+        .filter(s => s.exactAmount > 0);
+      if (rescaled.length === 0) continue;
+      result.push({ ...expense, totalAmount, payers, shares: rescaled });
+      continue;
+    }
+
+    result.push({ ...expense, totalAmount, payers, shares });
+  }
+
+  return result;
+}

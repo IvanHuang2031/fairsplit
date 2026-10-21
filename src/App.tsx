@@ -45,6 +45,24 @@ export const App: React.FC = () => {
     return calculateSettlement(bill.members, bill.expenses, bill.options);
   }, [bill.members, bill.expenses, bill.options]);
 
+  const handleRemoveMember = (id: string) => {
+    const member = bill.members.find(m => m.id === id);
+    const involved = bill.expenses.filter(
+      e => e.payers.some(p => p.memberId === id) || e.shares.some(s => s.memberId === id)
+    );
+    if (
+      member &&
+      involved.length > 0 &&
+      !window.confirm(
+        `「${member.name}」參與了 ${involved.length} 筆支出。\n\n` +
+          '移除後會當作這位成員沒有參加：其代墊的金額會從該筆總額扣除，其分攤改由其他一起分的人負擔，只跟這位成員有關的支出會被刪除。\n\n確定要移除嗎？'
+      )
+    ) {
+      return;
+    }
+    removeMember(id);
+  };
+
   const handleOpenAddExpense = () => {
     setEditingExpense(null);
     setIsExpenseModalOpen(true);
@@ -137,7 +155,7 @@ export const App: React.FC = () => {
         <MemberManager
           members={bill.members}
           onAddMember={addMember}
-          onRemoveMember={removeMember}
+          onRemoveMember={handleRemoveMember}
         />
 
         {/* Section 2: Expense List */}

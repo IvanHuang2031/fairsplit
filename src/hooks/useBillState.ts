@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { BillState, Member, Expense, SettlementOptions } from '../types';
 import { parseHash } from '../utils/urlState';
 import { syncEngine } from '../utils/syncEngine';
+import { removeMemberFromExpenses } from '../utils/settlement';
 
 const STORAGE_KEY = 'fairsplit_active_bill_v1';
 const THEME_KEY = 'fairsplit_theme';
@@ -293,12 +294,8 @@ export function useBillState() {
     updateBill(prev => ({
       ...prev,
       members: prev.members.filter(m => m.id !== id),
-      // Clean up member from expenses
-      expenses: prev.expenses.map(e => ({
-        ...e,
-        payers: e.payers.filter(p => p.memberId !== id),
-        shares: e.shares.filter(s => s.memberId !== id),
-      })).filter(e => e.payers.length > 0), // Remove expenses without any payers
+      // Clean up member from expenses, keeping every remaining expense balanced
+      expenses: removeMemberFromExpenses(prev.expenses, id, prev.options.roundToInteger),
     }));
   }, [updateBill]);
 
