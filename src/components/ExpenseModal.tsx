@@ -19,6 +19,12 @@ interface ExpenseModalProps {
   editingExpense?: Expense | null;
 }
 
+// Local calendar date (toISOString() is UTC and yields yesterday before 08:00 in UTC+8)
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const CATEGORIES = [
   { label: '餐飲', emoji: '🍜' },
   { label: '交通', emoji: '🚗' },
@@ -39,7 +45,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [totalAmountStr, setTotalAmountStr] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(todayLocal);
   const [category, setCategory] = useState('餐飲');
   const [note, setNote] = useState('');
 
@@ -51,7 +57,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   // Split state
   const [splitType, setSplitType] = useState<SplitType>('equal_all');
   const [selectedMembers, setSelectedMembers] = useState<Record<string, boolean>>({});
-  const [memberShares, setMemberShares] = useState<Record<string, number>>({});
+  // Kept as strings so the input can be cleared while typing
+  const [memberShares, setMemberShares] = useState<Record<string, string>>({});
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
 
   const [errorMessage, setErrorMessage] = useState('');
@@ -83,18 +90,20 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       // Split Type
       setSplitType(editingExpense.splitType);
       const selectedMap: Record<string, boolean> = {};
-      const sharesMap: Record<string, number> = {};
+      const sharesMap: Record<string, string> = {};
       const exactMap: Record<string, string> = {};
 
+      // Members left out of a by_shares expense must stay at 0, otherwise re-saving silently adds them back
+      const defaultShares = editingExpense.splitType === 'by_shares' ? '0' : '1';
       members.forEach(m => {
         selectedMap[m.id] = false;
-        sharesMap[m.id] = 1;
+        sharesMap[m.id] = defaultShares;
         exactMap[m.id] = '';
       });
 
       editingExpense.shares.forEach(s => {
         selectedMap[s.memberId] = true;
-        if (s.shares !== undefined) sharesMap[s.memberId] = s.shares;
+        sharesMap[s.memberId] = String(s.shares ?? 1);
         if (s.exactAmount !== undefined) exactMap[s.memberId] = String(s.exactAmount);
       });
 
@@ -105,7 +114,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       // Create new
       setTitle('');
       setTotalAmountStr('');
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(todayLocal());
       setCategory('餐飲');
       setNote('');
       setIsMultiPayer(false);
@@ -114,11 +123,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setSplitType('equal_all');
 
       const selectedMap: Record<string, boolean> = {};
-      const sharesMap: Record<string, number> = {};
+      const sharesMap: Record<string, string> = {};
       const exactMap: Record<string, string> = {};
       members.forEach(m => {
         selectedMap[m.id] = true;
-        sharesMap[m.id] = 1;
+        sharesMap[m.id] = '1';
         exactMap[m.id] = '';
       });
       setSelectedMembers(selectedMap);
@@ -126,7 +135,10 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       setExactAmounts(exactMap);
     }
     setErrorMessage('');
-  }, [isOpen, editingExpense, members]);
+    // Intentionally not depending on `members`: in a live room every remote update creates a new
+    // members array, which would wipe the form the user is currently filling in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editingExpense]);
 
   if (!isOpen) return null;
 
@@ -210,7 +222,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
       const activeShares = members
         .map(m => ({
           memberId: m.id,
-          shares: memberShares[m.id] || 0,
+          shares: parseFloat(memberShares[m.id]) || 0,
         }))
         .filter(s => s.shares > 0);
 
@@ -318,6 +330,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 <input
                   type="number"
                   step={roundToInteger ? '1' : '0.01'}
+                  inputMode={roundToInteger ? 'numeric' : 'decimal'}
                   min="0"
                   placeholder="0"
                   value={totalAmountStr}
@@ -397,6 +410,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       type="number"
                       min="0"
                       step={roundToInteger ? '1' : '0.01'}
+                      inputMode={roundToInteger ? 'numeric' : 'decimal'}
                       placeholder="0"
                       value={multiPayers[m.id] || ''}
                       onChange={e =>
@@ -519,12 +533,11 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                         type="number"
                         min="0"
                         step="0.5"
-                        value={memberShares[m.id] ?? 1}
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={memberShares[m.id] ?? '1'}
                         onChange={e =>
-                          setMemberShares(prev => ({
-                            ...prev,
-                            [m.id]: parseFloat(e.target.value) || 0,
-                          }))
+                          setMemberShares(prev => ({ ...prev, [m.id]: e.target.value }))
                         }
                         className="w-16 px-2 py-1 text-center text-xs font-mono font-semibold bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-white"
                       />
@@ -552,6 +565,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                       type="number"
                       min="0"
                       step={roundToInteger ? '1' : '0.01'}
+                      inputMode={roundToInteger ? 'numeric' : 'decimal'}
                       placeholder="0"
                       value={exactAmounts[m.id] || ''}
                       onChange={e =>
